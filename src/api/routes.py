@@ -150,7 +150,7 @@ async def get_tenant_stats(
 @router.post("/ingest/run")
 async def run_ingestion(
     tenant_id: str,
-    background_tasks: BackgroundTasks,
+    # background_tasks: BackgroundTasks,
     ingest_service: IngestService = Depends()
 ):
     """
@@ -160,13 +160,60 @@ async def run_ingestion(
     - Task 8: Prevent concurrent ingestion using a distributed lock.
     - If ingestion is already running for this tenant, return 409 Conflict.
     """
-    # TODO: Attempt to acquire a distributed lock before starting ingestion.
-    # lock_service = LockService()
-    # if not await lock_service.acquire_lock(f"ingest:{tenant_id}", job_id):
-    #     raise HTTPException(status_code=409, detail="Ingestion already running")
 
     result = await ingest_service.run_ingestion(tenant_id)
-    return {"status": "ingestion_started", "result": result}
+
+    if result["status"] == "already_running":
+        raise HTTPException(
+            status_code=409,
+            detail="Ingestion already running for this tenant"
+        )
+
+    return result
+    # TODO: Attempt to acquire a distributed lock before starting ingestion.
+    lock_service = LockService()
+    # if not await lock_service.acquire_lock(f"ingest:{tenant_id}", job_id):
+    #     raise HTTPException(status_code=409, detail="Ingestion already running")
+    # Unique job identifier
+
+    job_id = f"{tenant_id}-{datetime.utcnow().isoformat()}"
+
+    # Attempt to acquire lock
+    acquired = await lock_service.acquire_lock(
+        resource_id=f"ingest:{tenant_id}",
+        owner_id=job_id
+    )
+
+    if not acquired:
+        raise HTTPException(
+            status_code=409,
+            detail="Ingestion already running for this tenant"
+        )
+    
+    try:
+        # Run ingestion
+        result = await ingest_service.run_ingestion(tenant_id)
+        return {
+            "status": "ingestion_started",
+            "job_id": job_id,
+            "result": result
+        }
+    
+    # finally:
+    #     # Always release lock
+    #     await lock_service.release_lock(
+    #         resource_id=f"ingest:{tenant_id}",
+    #         owner_id=job_id
+    #     )
+
+    finally:
+        await lock_service.release_lock(
+        resource_id=lock_key,
+        owner_id=job_id
+        )
+    
+    # result = await ingest_service.run_ingestion(tenant_id)
+    # return {"status": "ingestion_started", "result": result}
 
 
 @router.get("/ingest/status")

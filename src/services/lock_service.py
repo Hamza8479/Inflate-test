@@ -46,7 +46,32 @@ class LockService:
         - Use an atomic MongoDB operation.
         """
         # TODO: implement
-        pass
+        db = await get_db()
+        now = datetime.utcnow()
+        expires_at = now + timedelta(seconds=self.LOCK_TTL_SECONDS)
+
+        result = await db[self.LOCK_COLLECTION].find_one_and_update(
+            {
+                "resource_id": resource_id,
+                "$or": [
+                    {"expires_at": {"$lt": now}},   # expired lock
+                    {"expires_at": {"$exists": False}}
+                ]
+            },
+            {
+                "$set": {
+                    "resource_id": resource_id,
+                    "owner_id": owner_id,
+                    "acquired_at": now,
+                    "expires_at": expires_at
+                }
+            },
+            upsert=True,
+            return_document=True
+        )
+
+        # Lock is acquired only if we are the owner
+        return result["owner_id"] == owner_id
 
     async def release_lock(self, resource_id: str, owner_id: str) -> bool:
         """
@@ -63,7 +88,12 @@ class LockService:
         - Only release the lock when `owner_id` matches the stored owner.
         """
         # TODO: implement
-        pass
+        db = await get_db()
+        result = await db[self.LOCK_COLLECTION].delete_one({
+            "resource_id": resource_id,
+            "owner_id": owner_id
+        })
+        return result.deleted_count == 1
 
     async def refresh_lock(self, resource_id: str, owner_id: str) -> bool:
         """
@@ -80,7 +110,20 @@ class LockService:
         - For long-running jobs, call this periodically to keep the lock alive.
         """
         # TODO: implement
-        pass
+        db = await get_db()
+        new_expiry = datetime.utcnow() + timedelta(seconds=self.LOCK_TTL_SECONDS)
+
+        result = await db[self.LOCK_COLLECTION].update_one(
+            {
+                "resource_id": resource_id,
+                "owner_id": owner_id
+            },
+            {
+                "$set": {"expires_at": new_expiry}
+            }
+        )
+
+        return result.modified_count == 1
 
     async def get_lock_status(self, resource_id: str) -> Optional[dict]:
         """

@@ -5,6 +5,8 @@ import asyncio
 from src.db.mongo import get_db
 from src.services.classify_service import ClassifyService
 from src.services.notify_service import NotifyService
+from src.services.lock_service import LockService
+
 
 # ============================================================
 # 🐛 DEBUG TASK C: Memory leak
@@ -33,22 +35,40 @@ class IngestService:
         # 🐛 DEBUG TASK D: Race condition
         # Check-then-act pattern: concurrent requests can both pass.
         # ============================================================
-        existing_job = await db.ingestion_jobs.find_one({
-            "tenant_id": tenant_id,
-            "status": "running"
-        })
+        # existing_job = await db.ingestion_jobs.find_one({
+        #     "tenant_id": tenant_id,
+        #     "status": "running"
+        # })
+
+        # lock_service = LockService()
+        # lock_key = f"ingest:{tenant_id}"
+
+        # acquired = await lock_service.acquire_lock(
+        #         resource_id=lock_key,
+        #         owner_id=job_id
+        #     )
+
+        # if not acquired:
+        #         return {
+        #             "status": "already_running",
+        #             "job_id": None,
+        #             "new_ingested": 0,
+        #             "updated": 0,
+        #             "errors": 0
+        #         }
+
 
         # 🐛 If a context switch happens here, multiple requests can pass this point.
-        await asyncio.sleep(0)  # intentional yield point
+        # await asyncio.sleep(0)  # intentional yield point
 
-        if existing_job:
-            return {
-                "status": "already_running",
-                "job_id": str(existing_job["_id"]),
-                "new_ingested": 0,
-                "updated": 0,
-                "errors": 0
-            }
+        # if existing_job:
+        #     return {
+        #         "status": "already_running",
+        #         "job_id": str(existing_job["_id"]),
+        #         "new_ingested": 0,
+        #         "updated": 0,
+        #         "errors": 0
+        #     }
 
         # Record ingestion job start
         job_doc = {
@@ -61,6 +81,23 @@ class IngestService:
         }
         result = await db.ingestion_jobs.insert_one(job_doc)
         job_id = str(result.inserted_id)
+
+        lock_service = LockService()
+        lock_key = f"ingest:{tenant_id}"
+
+        acquired = await lock_service.acquire_lock(
+                resource_id=lock_key,
+                owner_id=job_id
+            )
+
+        if not acquired:
+                return {
+                    "status": "already_running",
+                    "job_id": None,
+                    "new_ingested": 0,
+                    "updated": 0,
+                    "errors": 0
+                }
 
         # ============================================================
         # 🐛 DEBUG TASK C: Memory leak (continued)

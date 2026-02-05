@@ -49,6 +49,19 @@ async def create_indexes():
     await ingestion_logs.create_index([("job_id", pymongo.ASCENDING)])
 
 
+    locks = db.distributed_locks
+
+    await locks.create_index(
+        [("resource_id", 1)],
+        unique=True
+    )
+
+    await locks.create_index(
+        [("expires_at", 1)]
+    )
+
+
+
 # ============================================================
 # Hint: Example of good index design
 # ============================================================
