@@ -126,6 +126,16 @@ class IngestService:
                         ticket["tenant_id"] = tenant_id
                         ticket["external_id"] = ticket["id"]
 
+                        # Task 2 applying classification 
+                        classification = ClassifyService.classify(
+                            message=ticket.get("message", ""),
+                            subject=ticket.get("subject", "")
+                        )
+
+                        ticket["urgency"] = classification["urgency"]
+                        ticket["sentiment"] = classification["sentiment"]
+                        ticket["requires_action"] = classification["requires_action"]
+
                         update_result = await db.tickets.update_one(
                             {
                                 "tenant_id": tenant_id,
