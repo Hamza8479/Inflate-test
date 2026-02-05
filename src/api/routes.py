@@ -7,6 +7,7 @@ from src.services.ingest_service import IngestService
 from src.services.analytics_service import AnalyticsService
 from src.services.lock_service import LockService
 from src.services.circuit_breaker import get_circuit_breaker
+from src.core.logging import logger
 
 router = APIRouter()
 
@@ -85,7 +86,40 @@ async def health_check():
     """
     # Basic health check endpoint.
     # TODO: implement dependency checks (e.g., DB, external services).
-    return {"status": "ok"}
+    health_status = {
+        "status": "ok",
+        "dependencies": {
+            "database": "ok",
+            "external_api": "ok"
+        }
+    }
+
+    # 1. Check MongoDB connection
+    try:
+        db = await get_db()
+        await db.command("ping")
+    except Exception as e:
+        logger.error(f"Health check failed: MongoDB error: {e}")
+        health_status["status"] = "degraded"
+        health_status["dependencies"]["database"] = "down"
+
+    # 2. Check External API
+    try:
+        async with httpx.AsyncClient(timeout=2) as client:
+            response = await client.get("http://mock-external-api:9000/health")
+            if response.status_code != 200:
+                raise Exception("External API returned non-200")
+    except Exception as e:
+        logger.error(f"Health check failed: External API error: {e}")
+        health_status["status"] = "degraded"
+        health_status["dependencies"]["external_api"] = "down"
+
+    # 3. Final decision
+    if health_status["status"] != "ok":
+        raise HTTPException(status_code=503, detail=health_status)
+
+    return health_status
+
 
 
 # ============================================================
