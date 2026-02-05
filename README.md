@@ -176,14 +176,92 @@ This ensures:
 
 ## Task 1 – Reliable Data Ingestion
 
-- Source-driven ingestion from external API (no synthetic data)
-- Manual pagination handling
-- Idempotent upserts using (tenant_id, external_id)
-- Ingestion audit via ingestion_jobs and ingestion_logs
-- Safe re-runs without duplication
+POST /ingest/run?tenant_id=...
+
+Fetches tickets from a paginated external API
+
+Fully idempotent using (tenant_id, external_id) upserts
+
+Safe to re-run without creating duplicates
+
+## Task 2 – Ticket Classification
+
+Rule-based classification during ingestion
+
+Computes:
+
+urgency (high / medium / low)
+
+sentiment (positive / neutral / negative)
+
+requires_action (boolean)
+
+Classification is stored with each ticket
 
 ### Data Model Philosophy
 
 This system is ingestion-driven. Tickets are not created manually or seeded.
 All ticket records originate from an external SaaS provider via the ingestion pipeline.
 This ensures data consistency, auditability, and realistic production behavior.
+
+## Task 3 – Analytics & Reporting
+
+GET /tenants/{tenant_id}/stats
+
+Uses MongoDB aggregation pipelines (DB-side computation)
+
+Includes:
+
+total tickets
+
+tickets by status
+
+high-urgency ratio
+
+negative sentiment ratio
+
+hourly trend (last 24h)
+
+Optimized with appropriate indexes
+
+## Task 4 – Reliable Notifications
+
+High-urgency tickets trigger notifications to an external service
+
+Implemented with async retries and backoff (no external retry libraries)
+
+Notification failures do not block ingestion
+
+## Task 5 – System Health Monitoring
+
+GET /health
+
+Checks:
+
+MongoDB connectivity
+
+External API availability
+
+Returns non-200 status if a dependency is unhealthy
+
+## Task 6 – Ingestion Audit Logging
+
+Every ingestion run is recorded in ingestion_logs
+
+Logs include:
+
+start/end timestamps
+
+final status
+
+processed counts
+
+Failures are logged with error details
+
+## Task 7 – Resource Management & Stability
+
+MongoDB client is reused (singleton)
+
+Stable under repeated ingestion and concurrent analytics requests
+
+No connection leaks or uncontrolled resource growth
