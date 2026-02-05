@@ -149,6 +149,17 @@ class IngestService:
                             new_ingested += 1
                         else:
                             updated += 1
+                    
+                        # Task 4: notify on high urgency (NON-BLOCKING)
+                        if ticket["urgency"] == "high":
+                            asyncio.create_task(
+                                self.notify_service.send_notification(
+                                    ticket_id=ticket["external_id"],
+                                    tenant_id=tenant_id,
+                                    urgency=ticket["urgency"],
+                                    reason="High urgency ticket detected"
+                                )
+                            )
 
                     # Update pagination progress
                     await db.ingestion_jobs.update_one(
