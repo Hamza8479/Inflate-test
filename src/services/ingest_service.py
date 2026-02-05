@@ -177,6 +177,16 @@ class IngestService:
 
                     page += 1
 
+                await db.ingestion_logs.insert_one({
+                    "tenant_id": tenant_id,
+                    "job_id": job_id,
+                    "status": "completed",
+                    "started_at": job_doc["started_at"],
+                    "ended_at": datetime.utcnow(),
+                    "new_ingested": new_ingested,
+                    "updated": updated,
+                    "errors": errors
+                })
 
 
             # pass
